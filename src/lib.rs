@@ -78,7 +78,7 @@ pub fn parallel_image<F>(width: u32,
     let interpolate = Arc::new(|x, y| interpolate_pixel(x, y, width, height, -1.0, 1.0, -1.0, 1.0));
     let mut image = ImageBuffer::new(width, height);
 
-    // open a new scope so we can mutably borrow image for the iterator, but also return it
+    // open a new scope so we can mutably borrow `image` for the iterator, but also return it
     {
         let pixel_iter = Arc::new(Mutex::new(image.enumerate_pixels_mut()));
 
@@ -99,7 +99,11 @@ pub fn parallel_image<F>(width: u32,
                     // the single-threaded implementation; every thread will block while waiting
                     // for the iterator.
                     while let Some((x, y, pixel)) = pixel_iter.lock().unwrap().next() {
-                        *pixel = image::Luma([applications_until(interpolate(x, y), function, threshold, Some(255)) as u8]);
+                        *pixel = image::Luma([applications_until(interpolate(x, y),
+                                                                 function,
+                                                                 threshold,
+                                                                 Some(255))
+                                              as u8]);
                     }
                 }));
             }

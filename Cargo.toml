@@ -3,6 +3,14 @@ name = "julia-set"
 version = "0.1.0"
 authors = ["coriolinus <coriolinus@gmail.com>"]
 
+[lib]
+name = "julia_set_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "julia_set_bin"
+path = "src/bin.rs"
+
 [dependencies]
 crossbeam = "0.2"
 image = "0.10.1"
