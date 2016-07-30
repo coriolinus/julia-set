@@ -2,7 +2,7 @@ extern crate crossbeam;
 extern crate image;
 extern crate num;
 
-use image::{GenericImage, ImageBuffer};
+use image::ImageBuffer;
 use num::complex::Complex64;
 use std::sync::{Arc, Mutex};
 
@@ -66,50 +66,61 @@ pub fn sequential_image<F>(width: u32,
     })
 }
 
-/// Construct an image in a parallel manner,
+/// Construct an image in a parallel manner
 pub fn parallel_image<F>(width: u32,
                          height: u32,
                          function: &F,
                          threshold: f64)
                          -> ImageBuffer<image::Luma<u8>, Vec<u8>>
-    where F: Fn(Complex64) -> Complex64
+    where F: Fn(Complex64) -> Complex64 + std::marker::Sync
 {
     // julia sets are only really interesting in the region [-1...1]
-    let interpolate = |x, y| interpolate_pixel(x, y, width, height, -1.0, 1.0, -1.0, 1.0);
-    let image = Arc::new(Mutex::new(ImageBuffer::new(width, height)));
+    let interpolate = Arc::new(|x, y| interpolate_pixel(x, y, width, height, -1.0, 1.0, -1.0, 1.0));
+    let mut image = ImageBuffer::new(width, height);
 
-    const THREADS: usize = 4; // I'm on a four-real-core machine right now
+    // open a new scope so we can mutably borrow image for the iterator, but also return it
+    {
+        let pixel_iter = Arc::new(Mutex::new(image.enumerate_pixels_mut()));
 
-    let mut threads = Vec::with_capacity(THREADS);
+        const THREADS: usize = 4; // I'm on a four-real-core machine right now
 
-    crossbeam::scope(|scope| {
-        for _ in 0..THREADS {
-            // Shadow the var here with clone
-            let image = image.clone();
+        let mut threads = Vec::with_capacity(THREADS);
 
-            threads.push(scope.spawn(move || {
-                // TODO: get a pixel, set it appropriately
-            }));
-        }
-    });
+        crossbeam::scope(|scope| {
+            for _ in 0..THREADS {
+                // Shadow the iterator here with clone to get an un-Arc'd version
+                let pixel_iter = pixel_iter.clone();
+                let interpolate = interpolate.clone();
 
-    // Collect thread results
-    threads.into_iter()
-        .map(|child| child.join())
-        .collect::<Vec<_>>();
+                threads.push(scope.spawn(move || {
+                    // I'm not 100% sure if the lock we acquire here persists for the duration
+                    // of the while loop, or just for the initial assignment. If it's actually
+                    // the former, this multi-threaded code can't actually move faster than
+                    // the single-threaded implementation; every thread will block while waiting
+                    // for the iterator.
+                    while let Some((x, y, pixel)) = pixel_iter.lock().unwrap().next() {
+                        *pixel = image::Luma([applications_until(interpolate(x, y), function, threshold, Some(255)) as u8]);
+                    }
+                }));
+            }
+        });
 
-    // Extract the actual data from its thread-safety wrappers
-    Arc::try_unwrap(image).unwrap().into_inner().unwrap()
+        // Collect thread results
+        threads.into_iter()
+            .map(|child| child.join())
+            .collect::<Vec<_>>();
+    }
+    image
 }
 
 /// Helper function to save the generated image as-is.
 /// Selects file data based on the path name. Use .png
 pub fn save_image<F>(width: u32,
-                         height: u32,
-                         function: &F,
-                         threshold: f64,
-                         path: &str)
-                         -> std::io::Result<()>
+                     height: u32,
+                     function: &F,
+                     threshold: f64,
+                     path: &str)
+                     -> std::io::Result<()>
     where F: Fn(Complex64) -> Complex64
 {
     sequential_image(width, height, function, threshold).save(path)
