@@ -72,7 +72,7 @@ pub fn parallel_image<F>(width: u32,
                          function: &F,
                          threshold: f64)
                          -> ImageBuffer<image::Luma<u8>, Vec<u8>>
-    where F: Fn(Complex64) -> Complex64 + std::marker::Sync
+    where F: Sync + Fn(Complex64) -> Complex64
 {
     // julia sets are only really interesting in the region [-1...1]
     let interpolate = Arc::new(|x, y| interpolate_pixel(x, y, width, height, -1.0, 1.0, -1.0, 1.0));
@@ -84,35 +84,32 @@ pub fn parallel_image<F>(width: u32,
 
         const THREADS: usize = 4; // I'm on a four-real-core machine right now
 
-        let mut threads = Vec::with_capacity(THREADS);
-
         crossbeam::scope(|scope| {
             for _ in 0..THREADS {
                 // Shadow the iterator here with clone to get an un-Arc'd version
                 let pixel_iter = pixel_iter.clone();
                 let interpolate = interpolate.clone();
 
-                threads.push(scope.spawn(move || {
-                    // I'm not 100% sure if the lock we acquire here persists for the duration
-                    // of the while loop, or just for the initial assignment. If it's actually
-                    // the former, this multi-threaded code can't actually move faster than
-                    // the single-threaded implementation; every thread will block while waiting
-                    // for the iterator.
-                    while let Some((x, y, pixel)) = pixel_iter.lock().unwrap().next() {
-                        *pixel = image::Luma([applications_until(interpolate(x, y),
-                                                                 function,
-                                                                 threshold,
-                                                                 Some(255))
-                                              as u8]);
+                scope.spawn(move || {
+                    // Suggested by reddit user u/Esption:
+                    // https://www.reddit.com/r/rust/comments/4vd6vr/what_is_the_scope_of_a_lock_acquired_in_the/d5xjo6x?context=3
+                    loop {
+                        let step = pixel_iter.lock().unwrap().next();
+                        match step {
+                            Some((x, y, pixel)) => *pixel = image::Luma([applications_until(interpolate(x, y),
+                                                                     function,
+                                                                     threshold,
+                                                                     Some(255))
+                                                  as u8]),
+                            None => break,
+                        }
                     }
-                }));
+                });
             }
         });
 
-        // Collect thread results
-        threads.into_iter()
-            .map(|child| child.join())
-            .collect::<Vec<_>>();
+        // Scoped threads take care of ensure everything joins here
+
     }
     image
 }
@@ -125,9 +122,9 @@ pub fn save_image<F>(width: u32,
                      threshold: f64,
                      path: &str)
                      -> std::io::Result<()>
-    where F: Fn(Complex64) -> Complex64
+    where F: Sync + Fn(Complex64) -> Complex64
 {
-    sequential_image(width, height, function, threshold).save(path)
+    parallel_image(width, height, function, threshold).save(path)
 }
 
 #[cfg(test)]
