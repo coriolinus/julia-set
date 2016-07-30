@@ -1,0 +1,6 @@
+[package]
+name = "julia-set"
+version = "0.1.0"
+authors = ["coriolinus <coriolinus@gmail.com>"]
+
+[dependencies]
