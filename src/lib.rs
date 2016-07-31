@@ -5,6 +5,7 @@ extern crate num;
 use image::ImageBuffer;
 use num::complex::Complex64;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A default julia set function chosen for its aesthetics
 pub fn default_julia(z: Complex64) -> Complex64 {
@@ -73,44 +74,50 @@ pub fn parallel_image<F>(width: u32,
                          -> ImageBuffer<image::Luma<u8>, Vec<u8>>
     where F: Sync + Fn(Complex64) -> Complex64
 {
+    const THREADS: usize = 4; // I'm on a four-real-core machine right now
     // julia sets are only really interesting in the region [-1...1]
     let interpolate = Arc::new(|x, y| interpolate_pixel(x, y, width, height, -1.0, 1.0, -1.0, 1.0));
-    let mut image = ImageBuffer::new(width, height);
+    let image_backend = Arc::new(Mutex::new(vec![0_u8; (width * height) as usize]));
+    let row_n = Arc::new(AtomicUsize::new(0));
 
-    // open a new scope so we can mutably borrow `image` for the iterator, but also return it
-    {
-        let pixel_iter = Arc::new(Mutex::new(image.enumerate_pixels_mut()));
+    crossbeam::scope(|scope| {
+        for _ in 0..THREADS {
+            let interpolate = interpolate.clone();
+            let image_backend = image_backend.clone();
+            let row_n = row_n.clone();
 
-        const THREADS: usize = 4; // I'm on a four-real-core machine right now
+            scope.spawn(move || {
+                // thread-local non-shared storage for the current row
+                let mut row = Vec::with_capacity(width as usize);
 
-        crossbeam::scope(|scope| {
-            for _ in 0..THREADS {
-                // Shadow the iterator here with clone to get an un-Arc'd version
-                let pixel_iter = pixel_iter.clone();
-                let interpolate = interpolate.clone();
+                loop {
+                    let y = row_n.fetch_add(1, Ordering::SeqCst) as u32;
+                    if y >= height { break; }
 
-                scope.spawn(move || {
-                    // Suggested by reddit user u/Esption:
-                    // https://www.reddit.com/r/rust/comments/4vd6vr/what_is_the_scope_of_a_lock_acquired_in_the/d5xjo6x?context=3
-                    loop {
-                        let step = pixel_iter.lock().unwrap().next();
-                        match step {
-                            Some((x, y, pixel)) => *pixel = image::Luma([applications_until(interpolate(x, y),
-                                                                     function,
-                                                                     threshold,
-                                                                     Some(255))
-                                                  as u8]),
-                            None => break,
-                        }
+                    row.clear();
+
+                    for x in 0..width as u32 {
+                        row.push(applications_until(interpolate(x, y),
+                                                    function,
+                                                    threshold,
+                                                    Some(255)) as u8);
                     }
-                });
-            }
-        });
 
-        // Scoped threads take care of ensure everything joins here
+                    // insert the row into the output buffer
+                    let idx_start = (y * width) as usize;
+                    let idx_end = ((y + 1) * width) as usize;
+                    {
+                        image_backend.lock().unwrap()[idx_start..idx_end].clone_from_slice(&row);
+                    }
+                }
+            });
+        }
+    });
 
-    }
-    image
+    // Scoped threads take care of ensure everything joins here
+    // Now, unpack the shared backend
+    let image_backend = Arc::try_unwrap(image_backend).unwrap().into_inner().unwrap();
+    ImageBuffer::from_raw(width, height, image_backend).unwrap()
 }
 
 /// Helper function to save the generated image as-is.
