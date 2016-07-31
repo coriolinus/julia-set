@@ -153,4 +153,13 @@ mod tests {
         assert_eq!(applications_until(Complex64::new(1.0, -1.0), &default_julia, 2.0, Some(256)),
                    1);
     }
+
+    #[test]
+    fn test_serial_parallel_agree() {
+        let (width, height) = (200, 200);
+        let threshold = 2.0;
+        assert!(parallel_image(width, height, &default_julia, threshold).pixels()
+            .zip(sequential_image(width, height, &default_julia, threshold).pixels())
+            .all(|(p, s)| p == s));
+    }
 }
