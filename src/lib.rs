@@ -66,7 +66,7 @@ pub fn sequential_image<F>(width: u32,
     })
 }
 
-/// Construct an image in a parallel manner
+/// Construct an image in a parallel manner using row-chunking
 pub fn parallel_image<F>(width: u32,
                          height: u32,
                          function: &F,
