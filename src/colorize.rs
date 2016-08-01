@@ -5,6 +5,7 @@
 //! of its output is to grayscale. Colorization is useful both to assist in
 //! distinguishing fine details, and to make the results simply look prettier.
 
+extern crate hsl;
 extern crate image;
 
 use image::{GenericImage, ImageBuffer, Pixel, Rgb, Rgba};

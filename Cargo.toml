@@ -1,6 +1,6 @@
 [package]
 name = "julia-set"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["coriolinus <coriolinus@gmail.com>"]
 
 [lib]
@@ -13,5 +13,6 @@ path = "src/bin.rs"
 
 [dependencies]
 crossbeam = "0.2"
+hsl = "0.1.1"
 image = "0.10.1"
 num = "0.1.34"
