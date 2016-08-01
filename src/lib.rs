@@ -7,6 +7,8 @@ use num::complex::Complex64;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+pub mod colorize;
+
 /// A default julia set function chosen for its aesthetics
 pub fn default_julia(z: Complex64) -> Complex64 {
     (z * z) - 0.221 - (0.713 * Complex64::i())
@@ -92,7 +94,9 @@ pub fn parallel_image<F>(width: u32,
 
                 loop {
                     let y = row_n.fetch_add(1, Ordering::SeqCst) as u32;
-                    if y >= height { break; }
+                    if y >= height {
+                        break;
+                    }
 
                     row.clear();
 
@@ -114,7 +118,7 @@ pub fn parallel_image<F>(width: u32,
         }
     });
 
-    // Scoped threads take care of ensure everything joins here
+    // Scoped threads take care of ensuring everything joins here
     // Now, unpack the shared backend
     let image_backend = Arc::try_unwrap(image_backend).unwrap().into_inner().unwrap();
     ImageBuffer::from_raw(width, height, image_backend).unwrap()
@@ -165,7 +169,8 @@ mod tests {
     fn test_serial_parallel_agree() {
         let (width, height) = (200, 200);
         let threshold = 2.0;
-        assert!(parallel_image(width, height, &default_julia, threshold).pixels()
+        assert!(parallel_image(width, height, &default_julia, threshold)
+            .pixels()
             .zip(sequential_image(width, height, &default_julia, threshold).pixels())
             .all(|(p, s)| p == s));
     }
