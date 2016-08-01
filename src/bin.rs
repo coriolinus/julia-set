@@ -2,7 +2,7 @@ extern crate image;
 extern crate julia_set_lib;
 
 use image::imageops::{resize, FilterType};
-use julia_set_lib::{parallel_image, default_julia};
+use julia_set_lib::{parallel_image, default_julia, interpolate_rectilinear};
 use julia_set_lib::colorize::{Colorizer, HSLColorizer};
 use std::env;
 use std::str::FromStr;
@@ -76,7 +76,10 @@ fn generate_julia(width: &str, height: &str, path: Option<&str>) -> JuliaResult 
     println!("  height: {}", height);
     println!("  path:   {}", path.display());
 
-    let image = parallel_image(width * 2, height * 2, &default_julia, 2.0);
+    // julia sets are only really interesting in the region [-1...1]
+    let interpolate = interpolate_rectilinear(width, height, -1.0, 1.0, -1.0, 1.0);
+
+    let image = parallel_image(width * 2, height * 2, &default_julia, &interpolate, 2.0);
     let colorizer = HSLColorizer::new();
     let image = resize(&colorizer.colorize(&image),
                        width,
