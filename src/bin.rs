@@ -1,6 +1,9 @@
+extern crate image;
 extern crate julia_set_lib;
 
-use julia_set_lib::{save_image, default_julia};
+use image::imageops::{resize, FilterType};
+use julia_set_lib::{parallel_image, default_julia};
+use julia_set_lib::colorize::{Colorizer, HSLColorizer};
 use std::env;
 use std::str::FromStr;
 
@@ -73,7 +76,14 @@ fn generate_julia(width: &str, height: &str, path: Option<&str>) -> JuliaResult 
     println!("  height: {}", height);
     println!("  path:   {}", path.display());
 
-    match save_image(width, height, &default_julia, 2.0, &*path.to_string_lossy()) {
+    let image = parallel_image(width * 2, height * 2, &default_julia, 2.0);
+    let colorizer = HSLColorizer::new();
+    let image = resize(&colorizer.colorize(&image),
+                       width,
+                       height,
+                       FilterType::Lanczos3);
+
+    match image.save(&*path.to_string_lossy()) {
         Ok(_) => JuliaResult::Success,
         Err(error) => {
             println!("Encountered error: {}", error);
