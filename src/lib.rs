@@ -224,19 +224,11 @@ mod tests {
     fn test_serial_parallel_agree() {
         let (width, height) = (200, 200);
         let threshold = 2.0;
-        let interpolate = Rc::new(interpolate_stretch(width, height, -1.0, 1.0, -1.0, 1.0));
+        let interpolate = interpolate_stretch(width, height, -1.0, 1.0, -1.0, 1.0);
 
-        assert!(parallel_image(width,
-                               height,
-                               &default_julia,
-                               &*interpolate.clone(),
-                               threshold)
+        assert!(parallel_image(width, height, &default_julia, &interpolate, threshold)
             .pixels()
-            .zip(sequential_image(width,
-                                  height,
-                                  &default_julia,
-                                  &*interpolate.clone(),
-                                  threshold)
+            .zip(sequential_image(width, height, &default_julia, &interpolate, threshold)
                 .pixels())
             .all(|(p, s)| p == s));
     }
