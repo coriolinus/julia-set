@@ -1,9 +1,9 @@
 extern crate image;
-extern crate julia_set_lib;
+extern crate julia_set;
 
 use image::imageops::{resize, FilterType};
-use julia_set_lib::{parallel_image, default_julia, interpolate_rectilinear};
-use julia_set_lib::colorize::{Colorizer, HSLColorizer};
+use julia_set::{parallel_image, default_julia, interpolate_rectilinear};
+use julia_set::colorize::{Colorizer, HSLColorizer};
 use std::env;
 use std::str::FromStr;
 
