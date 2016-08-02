@@ -17,13 +17,11 @@ pub fn default_julia(z: Complex64) -> Complex64 {
 /// Count the number of applications of `function` required until either component of
 /// the state value of repeated applications of `function(value)`
 /// exceeds the threshold. If `bound` is set, don't iterate more than that number of times.
-pub fn applications_until<F>(initial: Complex64,
-                             function: &F,
-                             threshold: f64,
-                             bound: Option<usize>)
-                             -> usize
-    where F: Fn(Complex64) -> Complex64
-{
+pub fn applications_until(initial: Complex64,
+                          function: &Fn(Complex64) -> Complex64,
+                          threshold: f64,
+                          bound: Option<usize>)
+                          -> usize {
     let mut value = initial;
     let mut count = 0;
     while count < bound.unwrap_or(std::usize::MAX) && value.norm_sqr() < (threshold * threshold) {
@@ -120,14 +118,12 @@ pub fn interpolate_stretch(width: u32,
 }
 
 /// Construct an image sequentially
-pub fn sequential_image<F>(width: u32,
-                           height: u32,
-                           function: &F,
-                           interpolate: &Fn(u32, u32) -> Complex64,
-                           threshold: f64)
-                           -> ImageBuffer<image::Luma<u8>, Vec<u8>>
-    where F: Fn(Complex64) -> Complex64
-{
+pub fn sequential_image(width: u32,
+                        height: u32,
+                        function: &Fn(Complex64) -> Complex64,
+                        interpolate: &Fn(u32, u32) -> Complex64,
+                        threshold: f64)
+                        -> ImageBuffer<image::Luma<u8>, Vec<u8>> {
     ImageBuffer::from_fn(width, height, |x, y| {
         // we know that the output will be in range [0...255], so let's cast it to u8
         // so it'll fill the brightness range properly
@@ -136,14 +132,12 @@ pub fn sequential_image<F>(width: u32,
 }
 
 /// Construct an image in a parallel manner using row-chunking
-pub fn parallel_image<F>(width: u32,
-                         height: u32,
-                         function: &F,
-                         interpolate: &(Fn(u32, u32) -> Complex64 + Sync),
-                         threshold: f64)
-                         -> ImageBuffer<image::Luma<u8>, Vec<u8>>
-    where F: Sync + Fn(Complex64) -> Complex64
-{
+pub fn parallel_image(width: u32,
+                      height: u32,
+                      function: &(Fn(Complex64) -> Complex64 + Sync),
+                      interpolate: &(Fn(u32, u32) -> Complex64 + Sync),
+                      threshold: f64)
+                      -> ImageBuffer<image::Luma<u8>, Vec<u8>> {
     const THREADS: usize = 4; // I'm on a four-real-core machine right now
     let image_backend = Arc::new(Mutex::new(vec![0_u8; (width * height) as usize]));
     let row_n = Arc::new(AtomicUsize::new(0));
