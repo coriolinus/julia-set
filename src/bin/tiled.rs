@@ -20,7 +20,7 @@ fn main() {
     const LOW: f64 = -1.5;
     const HIGH: f64 = 1.5;
     const STEPS: u32 = 7;
-    let interval = (HIGH - LOW) / (STEPS - 1) as f64; // 0.5 in range [-1.5..1.5] with 7
+    const INTERVAL: f64 = (HIGH - LOW) / (STEPS - 1) as f64; // 0.5 in range [-1.5..1.5] with 7
 
     let path = {
         let mut path = env::current_dir().unwrap();
@@ -36,8 +36,8 @@ fn main() {
         println!("For threshold {}:", threshold);
         let mut output = ImageBuffer::new(TILE_EDGE * STEPS, TILE_EDGE * STEPS);
 
-        for (y_init, imag) in (0..STEPS).map(|s| (s * TILE_EDGE, LOW + (s as f64 * interval))) {
-            for (x_init, real) in (0..STEPS).map(|s| (s * TILE_EDGE, LOW + (s as f64 * interval))) {
+        for (y_init, imag) in (0..STEPS).map(|s| (s * TILE_EDGE, LOW + (s as f64 * INTERVAL))) {
+            for (x_init, real) in (0..STEPS).map(|s| (s * TILE_EDGE, LOW + (s as f64 * INTERVAL))) {
                 println!("\tGenerating tile for ({} + {}i)", real, imag);
                 let fcz = reify_fcz(Complex64::new(real, imag));
                 let tile = parallel_image(TILE_EDGE, TILE_EDGE, &*fcz, &*interpolate, threshold);
