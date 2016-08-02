@@ -139,19 +139,17 @@ pub fn sequential_image<F>(width: u32,
 pub fn parallel_image<F>(width: u32,
                          height: u32,
                          function: &F,
-                         interpolate: &(Fn(u32, u32) -> Complex64 + Send + Sync),
+                         interpolate: &(Fn(u32, u32) -> Complex64 + Sync),
                          threshold: f64)
                          -> ImageBuffer<image::Luma<u8>, Vec<u8>>
     where F: Sync + Fn(Complex64) -> Complex64
 {
     const THREADS: usize = 4; // I'm on a four-real-core machine right now
     let image_backend = Arc::new(Mutex::new(vec![0_u8; (width * height) as usize]));
-    // let interpolate = Arc::new(*interpolate);
     let row_n = Arc::new(AtomicUsize::new(0));
 
     crossbeam::scope(|scope| {
         for _ in 0..THREADS {
-            // let interpolate = interpolate.clone();
             let image_backend = image_backend.clone();
             let row_n = row_n.clone();
 
