@@ -79,7 +79,7 @@ fn generate_julia(width: &str, height: &str, path: Option<&str>) -> JuliaResult 
     // julia sets are only really interesting in the region [-1...1]
     let interpolate = interpolate_rectilinear(width * 2, height * 2, -1.0, 1.0, -1.0, 1.0);
 
-    let image = parallel_image(width * 2, height * 2, &default_julia, &interpolate, 2.0);
+    let image = parallel_image(width * 2, height * 2, &default_julia, &*interpolate, 2.0);
     let colorizer = HSLColorizer::new();
     let image = resize(&colorizer.colorize(&image),
                        width,

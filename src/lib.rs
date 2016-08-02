@@ -70,7 +70,7 @@ pub fn interpolate_rectilinear(width: u32,
                                mut max_x: f64,
                                mut min_y: f64,
                                mut max_y: f64)
-                               -> Box<Fn(u32, u32) -> Complex64 + Send + Sync + 'static> {
+                               -> Box<Fn(u32, u32) -> Complex64 + Send + Sync> {
     let viewport_ratio = width as f64 / height as f64;
     let range_ratio = (max_x - min_x) / (max_y - min_y);
 
@@ -115,7 +115,7 @@ pub fn interpolate_stretch(width: u32,
                            max_x: f64,
                            min_y: f64,
                            max_y: f64)
-                           -> Box<Fn(u32, u32) -> Complex64 + Send + Sync + 'static> {
+                           -> Box<Fn(u32, u32) -> Complex64 + Send + Sync> {
     Box::new(move |x, y| interpolate_pixel(x, y, width, height, min_x, max_x, min_y, max_y))
 }
 
@@ -123,7 +123,7 @@ pub fn interpolate_stretch(width: u32,
 pub fn sequential_image<F>(width: u32,
                            height: u32,
                            function: &F,
-                           interpolate: &Box<Fn(u32, u32) -> Complex64>,
+                           interpolate: &Fn(u32, u32) -> Complex64,
                            threshold: f64)
                            -> ImageBuffer<image::Luma<u8>, Vec<u8>>
     where F: Fn(Complex64) -> Complex64
@@ -139,7 +139,7 @@ pub fn sequential_image<F>(width: u32,
 pub fn parallel_image<F>(width: u32,
                          height: u32,
                          function: &F,
-                         interpolate: &Box<Fn(u32, u32) -> Complex64 + Send + Sync>,
+                         interpolate: &(Fn(u32, u32) -> Complex64 + Send + Sync),
                          threshold: f64)
                          -> ImageBuffer<image::Luma<u8>, Vec<u8>>
     where F: Sync + Fn(Complex64) -> Complex64
@@ -194,7 +194,6 @@ pub fn parallel_image<F>(width: u32,
 #[cfg(test)]
 mod tests {
     use num::complex::Complex64;
-    use std::rc::Rc;
     use super::*;
 
     /// Fixing the normalization function puts these back to expected values, yay!
@@ -226,9 +225,9 @@ mod tests {
         let threshold = 2.0;
         let interpolate = interpolate_stretch(width, height, -1.0, 1.0, -1.0, 1.0);
 
-        assert!(parallel_image(width, height, &default_julia, &interpolate, threshold)
+        assert!(parallel_image(width, height, &default_julia, &*interpolate, threshold)
             .pixels()
-            .zip(sequential_image(width, height, &default_julia, &interpolate, threshold)
+            .zip(sequential_image(width, height, &default_julia, &*interpolate, threshold)
                 .pixels())
             .all(|(p, s)| p == s));
     }
