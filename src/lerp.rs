@@ -1,14 +1,36 @@
+//! Linear interpolation / extrapolation
+
 use std::iter;
 use std::iter::{Iterator, Skip, Chain, Once};
 use std::ops::{Add, Sub, Mul};
-use num::{Float};
+use num::Float;
 
+/// Types which are amenable to linear inter/extrapolation.
+///
+/// Note that due to the implementation details of the default implementation,
+/// `LerpIterator` is only actually
+/// an iterator for those types `T` which fit the constraint `Mul<f64, Output = T>`.
+/// This means that though you can use the `lerp` method on f32s, it will not work to
+/// iterate over the results of calling `lerp_iter` on an f32. Instead, up-cast
+/// your f32 as an f64 before calling: `(example_f32 as f64).lerp_iter(...)`.
+///
+/// The default implementation is mainly intended to be useful for complex
+/// numbers, vectors, and other types which may be multiplied by a
+/// scalar while retaining their own type.
 pub trait Lerp<F> {
     /// Interpolate / extrapolate between `self` and `other` using `t` as the parameter.
     ///
     /// At `t == 0.0`, the result is equal to `self`.
     /// At `t == 1.0`, the result is equal to `other`.
     /// At all other points, the result is a mix of `self` and `other`, proportional to `t`.
+    ///
+    /// ```
+    /// # use julia_set::lerp::Lerp;
+    /// let four_32 = 3.0_f32.lerp(5.0, 0.5);
+    /// assert_eq!(four_32, 4.0);
+    /// let four_64 = 3.0_f64.lerp(5.0, 0.5);
+    /// assert_eq!(four_64, 4.0);
+    /// ```
     fn lerp(self, other: Self, t: F) -> Self;
 
     /// Create an iterator which lerps from `self` to `other`.
@@ -23,7 +45,11 @@ pub trait Lerp<F> {
     /// let items: Vec<f64> = 3.0_f64.lerp_iter(5.0, 2).collect();
     /// assert_eq!(vec![3.0, 4.0], items);
     /// ```
-    fn lerp_iter(self, other: Self, steps: usize) -> LerpIterator<Self> where Self: Sized;
+    fn lerp_iter(self, other: Self, steps: usize) -> LerpIterator<Self>
+        where Self: Sized + Copy + Add<Output = Self> + Sub<Output = Self> + Mul<f64, Output = Self>
+    {
+        LerpIterator::<Self>::new(self, other, steps)
+    }
 
     /// Create an iterator which lerps from `self` to `other`.
     ///
@@ -41,8 +67,7 @@ pub trait Lerp<F> {
                         other: Self,
                         mut steps: usize)
                         -> Skip<Chain<LerpIterator<Self>, Once<Self>>>
-        where Self: Sized + Copy +
-                Add<Output = Self> + Sub<Output = Self> + Mul<f64, Output = Self>,
+        where Self: Sized + Copy + Add<Output = Self> + Sub<Output = Self> + Mul<f64, Output = Self>,
               F: Float
     {
         // reduce the number of times we consume the sub-iterator,
@@ -56,18 +81,23 @@ pub trait Lerp<F> {
     }
 }
 
+/// Default, generic implementation of Lerp.
+///
+/// Note that due to the implementation details, LerpIterator is only actually
+/// an iterator for those types `T` which fit the constraint `Mul<f64, Output = T>`.
+/// This means that though you can use the `lerp` method on f32s, it will not work to
+/// iterate over the results of calling `lerp_iter` on an f32. Instead, up-cast
+/// your f32 as an f64 before calling: `(example_f32 as f64).lerp_iter(...)`.
+///
+/// This default implementation is mainly intended to be useful for complex
+/// numbers, vectors, and other types which may be multiplied by a
+/// scalar while retaining their own type.
 impl<T, F> Lerp<F> for T
     where T: Copy + Add<Output = T> + Sub<Output = T> + Mul<F, Output = T>,
           F: Float
 {
     fn lerp(self, other: T, t: F) -> T {
         self + ((other - self) * t)
-    }
-
-    fn lerp_iter(self, other: Self, steps: usize) -> LerpIterator<Self>
-        where Self: Sized
-    {
-        LerpIterator::new(self, other, steps)
     }
 }
 
@@ -76,7 +106,7 @@ pub struct LerpIterator<T> {
     begin: T,
     end: T,
     steps: usize,
-    current_step: usize, //    float_type: PhantomData<F>,
+    current_step: usize,
 }
 
 impl<T> LerpIterator<T> {
@@ -85,7 +115,7 @@ impl<T> LerpIterator<T> {
             begin: begin,
             end: end,
             steps: steps,
-            current_step: 0, //            float_type: PhantomData,
+            current_step: 0,
         }
     }
 }
