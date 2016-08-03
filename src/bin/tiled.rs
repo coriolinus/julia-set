@@ -2,7 +2,7 @@ extern crate image;
 extern crate julia_set;
 extern crate num;
 
-use image::ImageBuffer;
+use image::{ImageBuffer, GenericImage};
 use julia_set::{parallel_image, interpolate_stretch};
 use num::complex::Complex64;
 use std::env;
@@ -34,16 +34,39 @@ fn main() {
 
     for threshold in (1_u8..6).map(|t| t as f64 / 2.0) {
         println!("For threshold {}:", threshold);
-        let mut output = ImageBuffer::new(TILE_EDGE * STEPS, TILE_EDGE * STEPS);
+        let mut output: ImageBuffer<image::Luma<u8>, Vec<u8>> = ImageBuffer::new(TILE_EDGE * STEPS,
+                                                                                 TILE_EDGE * STEPS);
 
-        for (y_init, imag) in (0..STEPS).map(|s| (s * TILE_EDGE, LOW + (s as f64 * INTERVAL))) {
-            for (x_init, real) in (0..STEPS).map(|s| (s * TILE_EDGE, LOW + (s as f64 * INTERVAL))) {
+        for (y, imag) in (0..STEPS).map(|s| (s * TILE_EDGE, LOW + (s as f64 * INTERVAL))) {
+            for (x, real) in (0..STEPS).map(|s| (s * TILE_EDGE, LOW + (s as f64 * INTERVAL))) {
                 println!("\tGenerating tile for ({} + {}i)", real, imag);
                 let fcz = reify_fcz(Complex64::new(real, imag));
                 let tile = parallel_image(TILE_EDGE, TILE_EDGE, &*fcz, &*interpolate, threshold);
+                if !output.copy_from(&tile, x, y) {
+                    println!("FATAL: Failed to copy tile into output.");
+                    println!("\tTile at ({}, {}) sized ({}, {})",
+                             x,
+                             y,
+                             TILE_EDGE,
+                             TILE_EDGE);
+                    let (width, height) = output.dimensions();
+                    println!("\tOutput container dimensions ({}, {})", width, height);
+                    panic!();
+                }
             }
         }
-    }
 
-    println!("There will be tiles...");
+        let file_name = {
+            let mut file_name = path.clone();
+            file_name.push(&format!("julia_threshold_{}_range_{}..{}.png", threshold, LOW, HIGH));
+            file_name.to_string_lossy().into_owned()
+        };
+
+        println!("\tSaving as {:?}", file_name);
+        if let Err(error) = output.save(file_name) {
+            println!("FATAL: Failed to save image.");
+            println!("\t{}", error);
+            panic!();
+        }
+    }
 }
