@@ -23,7 +23,8 @@ fn generate_tiled(low: f64,
 
     let mut output = ImageBuffer::new(tile_edge * steps, tile_edge * steps);
 
-    for (y, imag) in (0..steps).map(|s| (s * tile_edge, low + (s as f64 * interval))) {
+    for (y, imag) in (0..steps)
+        .map(|s| ((steps - s - 1) * tile_edge, low + (s as f64 * interval))) {
         for (x, real) in (0..steps).map(|s| (s * tile_edge, low + (s as f64 * interval))) {
             println!("\tGenerating tile for ({} + {}i)", real, imag);
             let fcz = reify_fcz(Complex64::new(real, imag));
@@ -50,7 +51,7 @@ fn generate_tiled(low: f64,
 /// want to change them.
 fn main() {
     const LOW: f64 = -1.5;
-    const HIGH: f64 = 1.5;
+    const HIGH: f64 = 0.0;
     const STEPS: u32 = 7;
     const INTERVAL: f64 = (HIGH - LOW) / (STEPS - 1) as f64; // 0.5 in range [-1.5..1.5] with 7
     const TILE_EDGE: u32 = 200;
