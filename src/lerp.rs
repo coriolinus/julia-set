@@ -7,14 +7,7 @@ use num::Float;
 
 /// Types which are amenable to linear inter/extrapolation.
 ///
-/// Note that due to the implementation details of the default implementation,
-/// `LerpIterator` is only actually
-/// an iterator for those types `T` which fit the constraint `Mul<f64, Output = T>`.
-/// This means that though you can use the `lerp` method on f32s, it will not work to
-/// iterate over the results of calling `lerp_iter` on an f32. Instead, up-cast
-/// your f32 as an f64 before calling: `(example_f32 as f64).lerp_iter(...)`.
-///
-/// The default implementation is mainly intended to be useful for complex
+/// This is mainly intended to be useful for complex
 /// numbers, vectors, and other types which may be multiplied by a
 /// scalar while retaining their own type.
 pub trait Lerp<F> {
@@ -32,7 +25,13 @@ pub trait Lerp<F> {
     /// assert_eq!(four_64, 4.0);
     /// ```
     fn lerp(self, other: Self, t: F) -> Self;
+}
 
+/// Types which can construct a lerping iterator from one point to another
+/// over a set number of steps.
+///
+/// For the most part, this is automatically implemented.
+pub trait LerpIter {
     /// Create an iterator which lerps from `self` to `other`.
     ///
     /// The iterator is half-open: it includes `self`, but not `other`
@@ -40,16 +39,12 @@ pub trait Lerp<F> {
     /// # Example
     ///
     /// ```
-    /// # use julia_set::lerp::Lerp;
+    /// # use julia_set::lerp::LerpIter;
     /// // lerp between 3 and 5, collecting two items
     /// let items: Vec<f64> = 3.0_f64.lerp_iter(5.0, 2).collect();
     /// assert_eq!(vec![3.0, 4.0], items);
     /// ```
-    fn lerp_iter(self, other: Self, steps: usize) -> LerpIterator<Self>
-        where Self: Sized + Copy + Add<Output = Self> + Sub<Output = Self> + Mul<f64, Output = Self>
-    {
-        LerpIterator::<Self>::new(self, other, steps)
-    }
+    fn lerp_iter(self, other: Self, steps: usize) -> LerpIterator<Self> where Self: Sized;
 
     /// Create an iterator which lerps from `self` to `other`.
     ///
@@ -60,15 +55,15 @@ pub trait Lerp<F> {
     /// # Example
     ///
     /// ```
-    /// # use julia_set::lerp::Lerp;
+    /// # use julia_set::lerp::LerpIter;
     /// assert_eq!(vec![3.0, 5.0], 3.0_f64.lerp_iter(5.0, 2).collect::<Vec<f64>>());
     /// ```
     fn lerp_iter_closed(self,
                         other: Self,
                         mut steps: usize)
                         -> Skip<Chain<LerpIterator<Self>, Once<Self>>>
-        where Self: Sized + Copy + Add<Output = Self> + Sub<Output = Self> + Mul<f64, Output = Self>,
-              F: Float
+        where Self: Copy,
+              LerpIterator<Self>: Iterator<Item = Self>
     {
         // reduce the number of times we consume the sub-iterator,
         // because we unconditionally add an element to the end.
@@ -77,7 +72,7 @@ pub trait Lerp<F> {
             steps -= 1;
             skipn = 1;
         }
-        self.lerp_iter(other, steps).chain(iter::once(other)).skip(skipn)
+        LerpIterator::new(self, other, steps).chain(iter::once(other)).skip(skipn)
     }
 }
 
@@ -101,6 +96,14 @@ impl<T, F> Lerp<F> for T
     }
 }
 
+impl<T> LerpIter for T
+    where T: Lerp<f64> + Sized
+{
+    fn lerp_iter(self, other: T, steps: usize) -> LerpIterator<T> {
+        LerpIterator::new(self, other, steps)
+    }
+}
+
 /// An iterator across a range defined by its endpoints and the number of intermediate steps.
 pub struct LerpIterator<T> {
     begin: T,
@@ -121,7 +124,7 @@ impl<T> LerpIterator<T> {
 }
 
 impl<T> Iterator for LerpIterator<T>
-    where T: Copy + Add<Output = T> + Sub<Output = T> + Mul<f64, Output = T>
+    where T: Lerp<f64> + Copy
 {
     type Item = T;
 
@@ -145,7 +148,4 @@ impl<T> Iterator for LerpIterator<T>
     }
 }
 
-impl<T> ExactSizeIterator for LerpIterator<T>
-    where T: Copy + Add<Output = T> + Sub<Output = T> + Mul<f64, Output = T>
-{
-}
+impl<T> ExactSizeIterator for LerpIterator<T> where T: Lerp<f64> + Copy {}
