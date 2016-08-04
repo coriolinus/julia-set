@@ -1,3 +1,8 @@
 target
 Cargo.lock
+
+# output file formats
 *.png
+*.mpg
+*.mp4
+*.mkv
