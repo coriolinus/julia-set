@@ -12,6 +12,9 @@ use julia_set::lerp::{Lerp, LerpIter};
 use num::Float;
 use num::complex::Complex64;
 use std::env;
+use std::fs;
+use std::io;
+use std::path;
 
 const PATH: [(Complex64, usize); 7] = [(Complex64 { re: 0.0, im: 0.0 }, 10),
                                        (Complex64 {
@@ -42,7 +45,7 @@ const PATH: [(Complex64, usize); 7] = [(Complex64 { re: 0.0, im: 0.0 }, 10),
                                        (Complex64 { re: 0.0, im: 0.0 }, 0)];
 
 fn main() {
-    App::new("animate")
+    let matches = App::new("animate")
        .about("generates sequences of images of julia sets for compilation to animation")
       // use crate_version! to pull the version number
       .version(crate_version!())
@@ -66,4 +69,39 @@ fn main() {
                 .help("Multiply the number of interpolation steps between each path point.")
             )
       .get_matches();
+
+    let colorize = matches.is_present("colorize");
+    let (width, height) = {
+        let dimensions = values_t!(matches, "dimensions", u32).unwrap_or_else(|e| e.exit());
+        (dimensions[0], dimensions[1])
+    };
+    let multiply = value_t!(matches, "multiply", usize).unwrap_or_else(|e| e.exit());
+
+    let mut path = env::current_dir().unwrap();
+    path.push("animate");
+    if !path.exists() {
+        fs::create_dir(path.clone())
+            .expect(&format!("Couldn't create output directory at {:?}", path));
+    }
+
+    println!("Output parameters:");
+    println!("  Colorize:    {}", colorize);
+    println!("  Dimensions:  {:?}", (width, height));
+    println!("  Mul Factor:  {}", multiply);
+    println!("  Output path: {:?}", path);
+    print!("Clearing output path... ");
+    remove_files_from(path).expect("FATAL error clearing output path!");
+    println!("done");
+
+
+}
+
+fn remove_files_from<P: AsRef<path::Path>>(path: P) -> io::Result<()> {
+    for entry in try!(fs::read_dir(path)) {
+        let entry = try!(entry);
+        if entry.path().is_file() {
+            try!(fs::remove_file(entry.path()));
+        }
+    }
+    Ok(())
 }
