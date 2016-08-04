@@ -111,10 +111,7 @@ fn main() {
                 for complex_position in strt.lerp_iter(end, steps * multiply) {
                     let filename = {
                         let mut name = path.clone();
-                        name.push(format!("julia_set_{:06}_({:.3}{:+.3}i).png",
-                                          count,
-                                          complex_position.re,
-                                          complex_position.im));
+                        name.push(format!("julia_set_{:06}.png", count));
                         name
                     };
                     print!("Generating {:?}... ", filename.clone());
