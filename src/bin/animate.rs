@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate clap;
+extern crate csv;
 extern crate image;
 extern crate julia_set;
 extern crate num;
@@ -38,6 +39,13 @@ fn main() {
                 .default_value("1")
                 .help("Multiply the number of interpolation steps between each path point.")
             )
+      .arg(Arg::with_name("pointsfile")
+                .short("p")
+                .long("points-file")
+                .value_names(&["PATH"])
+                .default_value("animation-steps.csv")
+                .help("CSV file from which to load the points data for this animation.")
+            )
       .get_matches();
 
     let colorize = matches.is_present("colorize");
@@ -46,14 +54,24 @@ fn main() {
         (dimensions[0], dimensions[1])
     };
     let multiply = value_t!(matches, "multiply", usize).unwrap_or_else(|e| e.exit());
+    let pointsfile = value_t!(matches, "pointsfile", String).unwrap_or_else(|e| e.exit());
 
     let mut path = env::current_dir().unwrap();
+    let pointsfile = path.join(pointsfile);
+    if !pointsfile.exists() || !pointsfile.is_file() {
+        println!("Points file at {:?}", pointsfile);
+        println!("  does not exist or is not a file.");
+        panic!();
+    }
+
     path.push("animate");
     if !path.exists() {
         fs::create_dir(path.clone())
             .expect(&format!("Couldn't create output directory at {:?}", path));
     }
 
+    println!("Input parameters:");
+    println!("  Points file: {:?}", pointsfile);
     println!("Output parameters:");
     println!("  Colorize:    {}", colorize);
     println!("  Dimensions:  {:?}", (width, height));
@@ -62,16 +80,18 @@ fn main() {
     print!("Clearing output path... ");
     remove_files_from(&path).expect("FATAL error clearing output path!");
     println!("done");
+
+    print!("Loading points... ");
+
+    let mut complex_path = Vec::new();
+    let mut rdr = csv::Reader::from_file(pointsfile).unwrap().has_headers(true).flexible(true);
+    for record in rdr.decode() {
+        let (real, imag, steps): (f64, f64, usize) = record.unwrap();
+        complex_path.push((Complex64::new(real, imag), steps));
+    }
+    println!("done");
+
     println!("Generating images...");
-
-    let complex_path = vec![(Complex64::new(0.0, 0.0), 10),
-                            (Complex64::new(-0.12, 0.0), 10),
-                            (Complex64::new(-0.8, 0.2), 10),
-                            (Complex64::new(-0.5, 0.5), 10),
-                            (Complex64::new(-0.1, 0.8), 10),
-                            (Complex64::new(-0.2, 0.6), 10),
-                            (Complex64::new(0.0, 0.0), 0)];
-
     let interpolate = interpolate_rectilinear(width, height, -1.1, 1.1, -1.1, 1.1);
     let colorizer = HSLColorizer::new();
 
@@ -91,7 +111,7 @@ fn main() {
                 for complex_position in strt.lerp_iter(end, steps * multiply) {
                     let filename = {
                         let mut name = path.clone();
-                        name.push(format!("julia_set_{:06}_({}{:+}i).png",
+                        name.push(format!("julia_set_{:06}_({:.3}{:+.3}i).png",
                                           count,
                                           complex_position.re,
                                           complex_position.im));
