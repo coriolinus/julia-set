@@ -56,23 +56,22 @@ pub trait LerpIter {
     ///
     /// ```
     /// # use julia_set::lerp::LerpIter;
-    /// assert_eq!(vec![3.0, 5.0], 3.0_f64.lerp_iter(5.0, 2).collect::<Vec<f64>>());
+    /// assert_eq!(vec![3.0, 5.0], 3.0_f64.lerp_iter_closed(5.0, 2).collect::<Vec<f64>>());
     /// ```
     fn lerp_iter_closed(self,
                         other: Self,
-                        mut steps: usize)
+                        steps: usize)
                         -> Skip<Chain<LerpIterator<Self>, Once<Self>>>
         where Self: Copy,
               LerpIterator<Self>: Iterator<Item = Self>
     {
         // reduce the number of times we consume the sub-iterator,
         // because we unconditionally add an element to the end.
-        let mut skipn = 0;
-        if steps > 0 {
-            steps -= 1;
-            skipn = 1;
+        if steps == 0 {
+            LerpIterator::new(self, other, steps).chain(iter::once(other)).skip(1)
+        } else {
+            LerpIterator::new(self, other, steps - 1).chain(iter::once(other)).skip(0)
         }
-        LerpIterator::new(self, other, steps).chain(iter::once(other)).skip(skipn)
     }
 }
 
