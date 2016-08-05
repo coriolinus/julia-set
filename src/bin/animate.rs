@@ -73,7 +73,7 @@ fn main() {
     //   - get a row from the CSV reader
     //   - map it to a (Complex64, usize)
     //   - map it to (Complex64, usize, Complex64) so we know our bounds
-    //   - map it to a long sequence of Complex64
+    //   - map it to a long sequence of Complex64 by lerping
     //   - enumerate it
     //   - for each of the (enumeration, complex), act out the body of the loop
     for (count, complex_position) in rdr.decode()
@@ -87,7 +87,7 @@ fn main() {
         .enumerate() {
 
         let filename = format!("julia_set_{:06}.png", count);
-        let file_path = conf.basepath.join(filename.clone());
+        let file_path = out_path.join(filename.clone());
         print!("Generating {:?}... ", filename.clone());
 
         let image = parallel_image(conf.width,
