@@ -73,16 +73,29 @@ fn main() {
     //   - get a row from the CSV reader
     //   - map it to a (Complex64, usize)
     //   - map it to (Complex64, usize, Complex64) so we know our bounds
+    //   - fill in the appropriate default number of steps if unspecified
     //   - map it to a long sequence of Complex64 by lerping
     //   - enumerate it
     //   - for each of the (enumeration, complex), act out the body of the loop
     for (count, complex_position) in rdr.decode()
         .map(|record| {
-            let (real, imag, steps): (f64, f64, usize) =
+            let (real, imag, steps): (f64, f64, Option<usize>) =
                 record.expect("Invalid format in input CSV");
             (Complex64::new(real, imag), steps)
         })
         .duplicate_first()
+        .map(|(start, steps, end)| {
+            let steps = match steps {
+                Some(s) => s,
+                None => {
+                    // if steps wasn't specified, generate steps from
+                    // the distance between the two points
+                    const DEFAULT_STEPS_PER_UNIT: usize = 5;
+                    ((end - start).norm() * DEFAULT_STEPS_PER_UNIT as f64).ceil() as usize
+                }
+            };
+            (start, steps, end)
+        })
         .flat_map(|(start, steps, end)| start.lerp_iter(end, steps * conf.multiply))
         .enumerate() {
 
