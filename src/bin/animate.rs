@@ -110,10 +110,11 @@ fn main() {
         match (start, cp_iter.next()) {
             (Some(strt), Some(&(end, next_steps))) => {
                 for complex_position in strt.lerp_iter(end, steps * multiply) {
-                    let filename = {
-                        let mut name = path.clone();
-                        name.push(format!("julia_set_{:06}.png", count));
-                        name
+                    let filename = format!("julia_set_{:06}.png", count);
+                    let file_path = {
+                        let mut fp = path.clone();
+                        fp.push(filename.clone());
+                        fp
                     };
                     print!("Generating {:?}... ", filename.clone());
 
@@ -129,10 +130,10 @@ fn main() {
                         print!("colorizing... ");
                         let image = colorizer.colorize(&image);
                         print!("saving... ");
-                        image.save(filename).expect("Fatal IO Error");
+                        image.save(file_path).expect("Fatal IO Error");
                     } else {
                         print!("saving... ");
-                        image.save(filename).expect("Fatal IO Error");
+                        image.save(file_path).expect("Fatal IO Error");
                     }
 
                     println!("done!");
