@@ -14,8 +14,6 @@
 //! of the previous item in the sequence. Note that as there's no trailing value,
 //! the final S value of the input iterator is ignored and discarded.
 
-use std::marker::PhantomData;
-
 /// Transform an Iterator over (C, S) into an Iterator over (C, S, C), duplicating C as necessary.
 ///
 /// See the module-level documentation for more details.
@@ -43,7 +41,44 @@ impl<I, C, S> DuplicateFirst<I, C, S> for I
 ///
 /// This `struct` is created by the `duplicate_first()` method on any `Iterator` which
 /// maches its signature.
+#[derive(Debug)]
 pub struct DupeFirst<I, C, S> {
     iterator: I,
     previous: Option<(C, S)>,
+}
+
+impl<I, C, S> Iterator for DupeFirst<I, C, S>
+    where I: Iterator<Item = (C, S)>,
+          C: Clone
+{
+    type Item = (C, S, C);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let prev = ::std::mem::replace(&mut self.previous, self.iterator.next());
+        // Can't use a match statement here even though it would be super clean;
+        // it would need to take the form
+        //  match (Some((pc, ps)), &Some((ref nc, ref ns))) {...},
+        // and you can't (currently?) bind both as move and as ref in the same
+        // match statement.
+        if let Some((pc, ps)) = prev {
+            if let Some((ref nc, _)) = self.previous {
+                return Some((pc, ps, nc.clone()));
+            }
+        }
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dupe_first() {
+        let items = vec![(1, 2), (3, 4), (5, 6)];
+        let expect = vec![(1, 2, 3), (3, 4, 5)];
+
+        assert_eq!(items.into_iter().duplicate_first().collect::<Vec<_>>(),
+                   expect);
+    }
 }
