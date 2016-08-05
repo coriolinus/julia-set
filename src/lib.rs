@@ -8,7 +8,6 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod colorize;
-pub mod lerp;
 
 /// A default julia set function chosen for its aesthetics
 pub fn default_julia(z: Complex64) -> Complex64 {

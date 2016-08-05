@@ -3,12 +3,13 @@ extern crate clap;
 extern crate csv;
 extern crate image;
 extern crate julia_set;
+extern crate lerp;
 extern crate num;
 
 use clap::{App, Arg};
 use julia_set::{parallel_image, interpolate_rectilinear};
 use julia_set::colorize::{Colorizer, HSLColorizer};
-use julia_set::lerp::LerpIter;
+use lerp::LerpIter;
 use num::complex::Complex64;
 use std::env;
 use std::fs;
