@@ -9,145 +9,109 @@ extern crate num;
 use clap::{App, Arg};
 use julia_set::{parallel_image, interpolate_rectilinear};
 use julia_set::colorize::{Colorizer, HSLColorizer};
+use julia_set::iter::DuplicateFirst;
 use lerp::LerpIter;
 use num::complex::Complex64;
 use std::env;
 use std::fs;
 use std::io;
 use std::path;
+use std::str::FromStr;
 
 fn main() {
-    let matches = App::new("animate")
-       .about("generates sequences of images of julia sets for compilation to animation")
-      // use crate_version! to pull the version number
-      .version(crate_version!())
-      .arg(Arg::with_name("colorize")
-                .short("c")
-                .long("colorize")
-                .help("If set, colorize the output images.")
-            )
-      .arg(Arg::with_name("dimensions")
-                .short("d")
-                .long("dimensions")
-                .value_names(&["WIDTH", "HEIGHT"])
-                .default_value("800,600")
-                .help("Set the dimensions of the output images.")
-            )
-      .arg(Arg::with_name("multiply")
-                .short("m")
-                .long("multiply")
-                .value_names(&["FACTOR"])
-                .default_value("1")
-                .help("Multiply the number of interpolation steps between each path point.")
-            )
-      .arg(Arg::with_name("pointsfile")
-                .short("p")
-                .long("points-file")
-                .value_names(&["PATH"])
-                .default_value("animation-steps.csv")
-                .help("CSV file from which to load the points data for this animation.")
-            )
-      .get_matches();
-
-    let colorize = matches.is_present("colorize");
-    let (width, height) = {
-        let dimensions = values_t!(matches, "dimensions", u32).unwrap_or_else(|e| e.exit());
-        (dimensions[0], dimensions[1])
+    // --------------------
+    // set up configuration
+    // --------------------
+    let conf = match AnimationConfiguration::new() {
+        Ok(conf) => conf,
+        Err(err) => panic!(err),
     };
-    let multiply = value_t!(matches, "multiply", usize).unwrap_or_else(|e| e.exit());
-    let pointsfile = value_t!(matches, "pointsfile", String).unwrap_or_else(|e| e.exit());
 
-    let mut path = env::current_dir().unwrap();
-    let pointsfile = path.join(pointsfile);
-    if !pointsfile.exists() || !pointsfile.is_file() {
-        println!("Points file at {:?}", pointsfile);
-        println!("  does not exist or is not a file.");
-        panic!();
-    }
-
-    path.push("animate");
-    if !path.exists() {
-        fs::create_dir(path.clone())
-            .expect(&format!("Couldn't create output directory at {:?}", path));
+    let out_path = conf.basepath.join("animate");
+    if !out_path.exists() {
+        fs::create_dir(out_path.clone())
+            .expect(&format!("Couldn't create output directory at {:?}", out_path));
     }
 
     println!("Input parameters:");
-    println!("  Points file: {:?}", pointsfile);
+    println!("  Points file: {:?}", conf.pointsfile);
     println!("Output parameters:");
-    println!("  Colorize:    {}", colorize);
-    println!("  Dimensions:  {:?}", (width, height));
-    println!("  Mul Factor:  {}", multiply);
-    println!("  Output path: {:?}", path);
+    println!("  Colorize:    {}", conf.colorize);
+    println!("  Dimensions:  {:?}", (conf.width, conf.height));
+    println!("  Mul Factor:  {}", conf.multiply);
+    println!("  Output path: {:?}", out_path);
     print!("Clearing output path... ");
-    remove_files_from(&path).expect("FATAL error clearing output path!");
-    println!("done");
-
-    print!("Loading points... ");
-
-    let mut complex_path = Vec::new();
-    let mut rdr = csv::Reader::from_file(pointsfile).unwrap().has_headers(true).flexible(true);
-    for record in rdr.decode() {
-        let (real, imag, steps): (f64, f64, usize) = record.unwrap();
-        complex_path.push((Complex64::new(real, imag), steps));
-    }
+    remove_files_from(&out_path).expect("FATAL error clearing output path!");
     println!("done");
 
     println!("Generating images...");
-    let interpolate = interpolate_rectilinear(width, height, -1.1, 1.1, -1.1, 1.1);
+
+    // ---------------------------
+    // set up prerequisite objects
+    // ---------------------------
+    let interpolate = interpolate_rectilinear(conf.width, conf.height, -1.1, 1.1, -1.1, 1.1);
     let colorizer = HSLColorizer::new();
+    let mut rdr = csv::Reader::from_file(conf.pointsfile.clone()).unwrap().flexible(true);
 
-    // there was a whole iterator adaptor thing which did this much more elegantly,
-    // but I couldn't get it to work. Maybe come back to this later.
-    let mut cp_iter = complex_path.iter();
-    let mut start = None;
-    let mut steps = 0;
-    if let Some(&(strt, stps)) = cp_iter.next() {
-        start = Some(strt);
-        steps = stps;
-    }
-    let mut count = 0;
-    loop {
-        match (start, cp_iter.next()) {
-            (Some(strt), Some(&(end, next_steps))) => {
-                for complex_position in strt.lerp_iter(end, steps * multiply) {
-                    let filename = format!("julia_set_{:06}.png", count);
-                    let file_path = {
-                        let mut fp = path.clone();
-                        fp.push(filename.clone());
-                        fp
-                    };
-                    print!("Generating {:?}... ", filename.clone());
-
-                    let image = parallel_image(width,
-                                               height,
-                                               &*Box::new(move |z| (z * z) + complex_position),
-                                               &*interpolate,
-                                               2.0);
-
-
-
-                    if colorize {
-                        print!("colorizing... ");
-                        let image = colorizer.colorize(&image);
-                        print!("saving... ");
-                        image.save(file_path).expect("Fatal IO Error");
-                    } else {
-                        print!("saving... ");
-                        image.save(file_path).expect("Fatal IO Error");
-                    }
-
-                    println!("done!");
-
-                    count += 1;
-                }
-
-                // set up for the next loop
-                start = Some(end);
-                steps = next_steps;
-            }
-            _ => break,
+    // determine at runtime if we have headers
+    {
+        let headers = rdr.headers().unwrap();
+        if headers.len() == 3 &&
+           (f64::from_str(&headers[0]).is_err() || f64::from_str(&headers[1]).is_err() ||
+            usize::from_str(&headers[2]).is_err()) {
+            rdr = rdr.has_headers(true);
+        } else {
+            rdr = rdr.has_headers(false);
         }
     }
+
+    // ---------
+    // main loop
+    // ---------
+    //
+    // this looks complex, but it's all just a sequence of operations on iterators:
+    //   - get a row from the CSV reader
+    //   - map it to a (Complex64, usize)
+    //   - map it to (Complex64, usize, Complex64) so we know our bounds
+    //   - map it to a long sequence of Complex64
+    //   - enumerate it
+    //   - for each of the (enumeration, complex), act out the body of the loop
+    for (count, complex_position) in rdr.decode()
+        .map(|record| {
+            let (real, imag, steps): (f64, f64, usize) =
+                record.expect("Invalid format in input CSV");
+            (Complex64::new(real, imag), steps)
+        })
+        .duplicate_first()
+        .flat_map(|(start, steps, end)| start.lerp_iter(end, steps * conf.multiply))
+        .enumerate() {
+
+        let filename = format!("julia_set_{:06}.png", count);
+        let file_path = conf.basepath.join(filename.clone());
+        print!("Generating {:?}... ", filename.clone());
+
+        let image = parallel_image(conf.width,
+                                   conf.height,
+                                   &move |z| (z * z) + complex_position,
+                                   &*interpolate,
+                                   2.0);
+
+
+
+        if conf.colorize {
+            print!("colorizing... ");
+            let image = colorizer.colorize(&image);
+            print!("saving... ");
+            image.save(file_path).expect("Fatal IO Error");
+        } else {
+            print!("saving... ");
+            image.save(file_path).expect("Fatal IO Error");
+        }
+
+        println!("done!");
+
+    }
+
     println!("Done!");
 }
 
@@ -159,4 +123,92 @@ fn remove_files_from<P: AsRef<path::Path>>(path: &P) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+struct AnimationConfiguration {
+    colorize: bool,
+    width: u32,
+    height: u32,
+    multiply: usize,
+    basepath: path::PathBuf,
+    pointsfile: path::PathBuf,
+}
+
+impl AnimationConfiguration {
+    fn build_cli() -> App<'static, 'static> {
+        App::new("animate")
+           .about("generates sequences of images of julia sets for compilation to animation")
+          // use crate_version! to pull the version number
+          .version(crate_version!())
+          .arg(Arg::with_name("colorize")
+                    .short("c")
+                    .long("colorize")
+                    .help("If set, colorize the output images.")
+                )
+          .arg(Arg::with_name("dimensions")
+                    .short("d")
+                    .long("dimensions")
+                    .value_names(&["WIDTH", "HEIGHT"])
+                    .default_value("800,600")
+                    .help("Set the dimensions of the output images.")
+                )
+          .arg(Arg::with_name("multiply")
+                    .short("m")
+                    .long("multiply")
+                    .value_names(&["FACTOR"])
+                    .default_value("1")
+                    .help("Multiply the number of interpolation steps between each path point.")
+                )
+          .arg(Arg::with_name("pointsfile")
+                    .short("p")
+                    .long("points-file")
+                    .value_names(&["PATH"])
+                    .default_value("animation-steps.csv")
+                    .help("CSV file from which to load the points data for this animation.")
+                )
+    }
+
+    /// Construct a new animation configuration object by reading and parsing the command line.
+    fn new() -> Result<AnimationConfiguration, String> {
+        AnimationConfiguration::unpack_matches(AnimationConfiguration::build_cli().get_matches())
+    }
+
+    fn unpack_matches(matches: clap::ArgMatches) -> Result<AnimationConfiguration, String> {
+        let colorize = matches.is_present("colorize");
+        let (width, height) = {
+            let dimensions = values_t!(matches, "dimensions", u32).unwrap_or_else(|e| e.exit());
+            (dimensions[0], dimensions[1])
+        };
+        let multiply = value_t!(matches, "multiply", usize).unwrap_or_else(|e| e.exit());
+        let pointsfile = value_t!(matches, "pointsfile", String).unwrap_or_else(|e| e.exit());
+
+        let path = env::current_dir().unwrap();
+        let pointsfile = path.join(pointsfile);
+        if !pointsfile.exists() || !pointsfile.is_file() {
+            return Err(format!("Points file at {:?} does not exist or is not a file.",
+                               pointsfile));
+        }
+
+        Ok(AnimationConfiguration {
+            colorize: colorize,
+            width: width,
+            height: height,
+            multiply: multiply,
+            basepath: path,
+            pointsfile: pointsfile,
+        })
+    }
+
+    /// Returns a string which resembles the way the program was called
+    fn called_as() -> String {
+        env::args().collect::<Vec<_>>().join(" ")
+    }
+}
+
+impl Default for AnimationConfiguration {
+    fn default() -> AnimationConfiguration {
+        AnimationConfiguration::unpack_matches(AnimationConfiguration::build_cli()
+                .get_matches_from(Vec::<String>::new()))
+            .unwrap()
+    }
 }
