@@ -6,3 +6,7 @@ Cargo.lock
 *.mpg
 *.mp4
 *.mkv
+
+# output directories
+/animate/*
+/tiles/*
