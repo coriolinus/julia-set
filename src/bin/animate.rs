@@ -15,6 +15,7 @@ use num::complex::Complex64;
 use std::env;
 use std::fs;
 use std::io;
+use std::io::Write;
 use std::path;
 use std::str::FromStr;
 
@@ -52,6 +53,16 @@ fn main() {
     let interpolate = interpolate_rectilinear(conf.width, conf.height, -1.1, 1.1, -1.1, 1.1);
     let colorizer = HSLColorizer::new();
     let mut rdr = csv::Reader::from_file(conf.pointsfile.clone()).unwrap().flexible(true);
+    let mut index_file = fs::File::create(out_path.join("index.toml")).unwrap();
+
+    // annotate how this was most recently run
+    writeln!(&mut index_file,
+             "# This index generated julia set animator using the command:")
+        .unwrap();
+    writeln!(&mut index_file,
+             "# > {}",
+             AnimationConfiguration::called_as())
+        .unwrap();
 
     // determine at runtime if we have headers
     {
@@ -77,7 +88,7 @@ fn main() {
     //   - map it to a long sequence of Complex64 by lerping
     //   - enumerate it
     //   - for each of the (enumeration, complex), act out the body of the loop
-    for (count, complex_position) in rdr.decode()
+    for (count, cplx) in rdr.decode()
         .map(|record| {
             let (real, imag, steps): (f64, f64, Option<usize>) =
                 record.expect("Invalid format in input CSV");
@@ -99,13 +110,17 @@ fn main() {
         .flat_map(|(start, steps, end)| start.lerp_iter(end, steps * conf.multiply))
         .enumerate() {
 
+
+
+        // actually generate the image
+
         let filename = format!("julia_set_{:06}.png", count);
         let file_path = out_path.join(filename.clone());
         print!("Generating {:?}... ", filename.clone());
 
         let image = parallel_image(conf.width,
                                    conf.height,
-                                   &move |z| (z * z) + complex_position,
+                                   &move |z| (z * z) + cplx,
                                    &*interpolate,
                                    2.0);
 
@@ -115,17 +130,31 @@ fn main() {
             print!("colorizing... ");
             let image = colorizer.colorize(&image);
             print!("saving... ");
-            image.save(file_path).expect("Fatal IO Error");
+            image.save(file_path.clone()).expect("Fatal IO Error");
         } else {
             print!("saving... ");
-            image.save(file_path).expect("Fatal IO Error");
+            image.save(file_path.clone()).expect("Fatal IO Error");
         }
 
         println!("done!");
 
+        // annotate this position in the output file
+        writeln!(&mut index_file, "").unwrap();
+        writeln!(&mut index_file, "[{:06}]", count).unwrap();
+        writeln!(&mut index_file, "path = \"{}\"", file_path.display()).unwrap();
+        writeln!(&mut index_file, "real = {}", cplx.re).unwrap();
+        writeln!(&mut index_file, "imag = {}", cplx.im).unwrap();
+        writeln!(&mut index_file,
+                 "repr = \"({:.3}{:+.3}i)\"",
+                 cplx.re,
+                 cplx.im)
+            .unwrap();
     }
 
     println!("Done!");
+    println!("You can create an animation from the output with the command:");
+    println!(" > ffmpeg -framerate 25 -i {} -c:v libx264 -vf fps=25 -pix_fmt yuv420p out.mp4",
+             out_path.join("julia_set_%06d.png").display());
 }
 
 fn remove_files_from<P: AsRef<path::Path>>(path: &P) -> io::Result<()> {
